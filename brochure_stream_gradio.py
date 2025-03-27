@@ -180,7 +180,7 @@ def create_brochure_stream_claude(company_name, url):
         
         
 # function to select between models
-def stream_model(company_name, url, selected_model):
+def stream_brochure(company_name, url, selected_model):
     if selected_model=="GPT":
         result = create_brochure_stream_gpt(company_name, url)
     elif selected_model=="Claude":
@@ -194,7 +194,7 @@ def stream_model(company_name, url, selected_model):
 ################################################## MAIN PROGRAM RUN ###########################################################################
 # create Gradio UI to get inputs from the user
 view = gr.Interface(
-    fn=stream_model,
+    fn=stream_brochure,
     inputs=[gr.Textbox(label="name of the site:", lines=1), 
             gr.Textbox(label="put url here:", lines=1), 
             gr.Dropdown(["GPT","Claude"], label="Select model", value="GPT")],
