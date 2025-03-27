@@ -201,4 +201,4 @@ view = gr.Interface(
     outputs=[gr.Markdown(label="Response:")],
     flagging_mode="never"
 )
-view.launch()
+view.launch(share=True)
