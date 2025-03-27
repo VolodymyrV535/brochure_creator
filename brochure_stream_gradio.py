@@ -6,21 +6,30 @@ from typing import List
 from dotenv import load_dotenv
 from bs4 import BeautifulSoup
 from openai import OpenAI
+import anthropic
 
 import gradio as gr
 
 
 # Initialize and constants
 load_dotenv(override=True)
-api_key = os.getenv('OPENAI_API_KEY')
+openai_api_key = os.getenv('OPENAI_API_KEY')
+anthropic_api_key = os.getenv('ANTHROPIC_API_KEY')
 
-if api_key and api_key.startswith('sk-proj-') and len(api_key)>10:
-    print("API key looks good so far")
+if openai_api_key and openai_api_key.startswith('sk-proj-') and len(openai_api_key)>10:
+    print("OpenaAI API key looks good so far")
 else:
     print("There might be a problem with your API key? Please visit the troubleshooting notebook!")
     
-MODEL = 'gpt-4o-mini'
+if anthropic_api_key:
+    print(f"Anthropic API Key exists and begins {anthropic_api_key[:7]}")
+else:
+    print("Anthropic API Key not set")
+    
+OPENAI_MODEL = 'gpt-4o-mini'
+CLAUDE_MODEL = "claude-3-haiku-20240307"
 openai = OpenAI()
+claude = anthropic.Anthropic()
 
 
 ################################################### Parse website content feature ############################################################
@@ -87,7 +96,7 @@ Do not include Terms of Service, Privacy, email links.\n"
 def get_links(url):
     website = Website(url)
     response = openai.chat.completions.create(
-        model=MODEL,
+        model=OPENAI_MODEL,
         messages=[
             {"role": "system", "content": LINK_SYSTEM_PROMPT},
             {"role": "user", "content": get_links_user_prompt(website)}
@@ -134,9 +143,9 @@ def get_brochure_user_prompt(company_name, url):
 
 
 # create a brochure via openai api based on prepared information
-def create_brochure_stream(company_name, url):
+def create_brochure_stream_gpt(company_name, url):
     stream = openai.chat.completions.create(
-        model=MODEL,
+        model=OPENAI_MODEL,
         messages=[
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": get_brochure_user_prompt(company_name, url)}
@@ -149,13 +158,46 @@ def create_brochure_stream(company_name, url):
     for chunk in stream:
         response += chunk.choices[0].delta.content or ''
         yield response
+        
+
+# create a brochure via anthropic api based on prepared information
+def create_brochure_stream_claude(company_name, url):
+    result = claude.messages.stream(
+        model=CLAUDE_MODEL,
+        max_tokens=1000,
+        temperature=0.7,
+        system=SYSTEM_PROMPT,
+        messages=[
+            {"role": "user", "content": get_brochure_user_prompt(company_name, url)}
+          ],
+    )
+    
+    response = ""
+    with result as stream:
+        for text in stream.text_stream:
+            response += text or ""
+            yield response
+        
+        
+# function to select between models
+def stream_model(company_name, url, selected_model):
+    if selected_model=="GPT":
+        result = create_brochure_stream_gpt(company_name, url)
+    elif selected_model=="Claude":
+        result = create_brochure_stream_claude(company_name, url)
+    else:
+        raise ValueError("Unknown model")
+    yield from result
+
     
     
 ################################################## MAIN PROGRAM RUN ###########################################################################
 # create Gradio UI to get inputs from the user
 view = gr.Interface(
-    fn=create_brochure_stream,
-    inputs=[gr.Textbox(label="name of the site:", lines=1), gr.Textbox(label="put url here:", lines=1)],
+    fn=stream_model,
+    inputs=[gr.Textbox(label="name of the site:", lines=1), 
+            gr.Textbox(label="put url here:", lines=1), 
+            gr.Dropdown(["GPT","Claude"], label="Select model", value="GPT")],
     outputs=[gr.Markdown(label="Response:")],
     flagging_mode="never"
 )
